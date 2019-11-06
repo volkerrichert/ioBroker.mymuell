@@ -1,0 +1,108 @@
+const city_id = 66005;
+const area_id = 2800;
+const logging = false;
+const name = 'Müllabfuhr Wegberg';
+const desc = '[z.b. Straße]';
+
+const request = require('request');
+const instanz = 'javascript.' + instance + '.muell';
+
+if (logging) log('starting muell.' + instanz);
+
+// States erstellen
+createState(instanz, {
+    name: name,
+    desc: desc,
+    type: 'channel',
+    read: true,
+    write: false
+});
+let baseData = {};
+
+// query names first
+request({
+    url: 'https://mymuell.jumomind.com/mmapp/api.php?r=trash&city_id=' + city_id + '&area_id=' + area_id, 
+    method: 'GET', 
+    headers: { 'Accept': 'application/json' }
+    }, function(error, response, body) {
+        if (!error && response.statusCode == 200) {
+            var data = JSON.parse(body);  // info ist ein Objekt
+            data.forEach((v, i) => {
+                baseData[v._name] = v;
+            })
+            updateMuell();
+        }
+    }
+);
+
+schedule('{"time":{"exactTime":true,"start":"12:17"},"period":{"days":1}}', updateMuell);
+
+function updateMuell() {
+    var options = {url: 'https://mymuell.jumomind.com/webservice.php?idx=termins&city_id=' + city_id + '&area_id=' + area_id + '&ws=3', method: 'GET', headers: { 'Accept': 'application/json' }};
+
+    request(options, function(error, response, body) {
+        if (!error && response.statusCode == 200) {
+            var info = JSON.parse(body);  // info ist ein Objekt
+            if (info[0].Ack === 'Success') {
+                var data = info[0]._data;  // xy ist eine Eigenschaft des Objektes info
+                let counter = 0;
+                const date = (new Date())
+                const todayStr = date.getFullYear() + "-" + ('00' + (date.getMonth() + 1 )).slice(-2) + "-" + ('00' + date.getDate()).slice(-2)
+                log(todayStr);
+                data.forEach((v, i) => {
+                    if (todayStr < v.cal_date && counter <= 9) {
+                        
+                        const basePath = instanz + '.' + ('000' + counter).slice(-3);
+                        log(v.cal_date + ' -> ' + basePath);
+                        // States erstellen
+                        createState(basePath, {
+                            name: counter,
+                            desc: v.cal_date_normal,
+                            type: 'channel',
+                            read: true,
+                            write: false
+                        });
+                        createState(basePath + '.date', v.cal_date_normal, {
+                            name: 'Datum',
+                            desc: 'Datum der Abholung',
+                            type: 'string',
+                            read: true,
+                            write: false
+                        }, () => {
+                            setState(basePath + '.date', v.cal_date_normal, true);
+                        });
+                        
+                        createState(basePath + '.desc', baseData[v.cal_garbage_type].title, {
+                            name: 'Beschreibung',
+                            desc: 'Beschreibung der Abholung',
+                            type: 'string',
+                            read: true,
+                            write: false
+                        }, () => {
+                            setState(basePath + '.desc', baseData[v.cal_garbage_type].title, true);
+                        });
+                        createState(basePath + '.color', {
+                            name: 'Farbe',
+                            desc: 'Farbe',
+                            type: 'string',
+                            role: 'level.color',
+                            read: true,
+                            write: false
+                        }, () => {
+                            setState(basePath + '.color', baseData[v.cal_garbage_type].color, true);
+                        });
+
+                        counter++;
+                    }
+                });
+                /*
+                let nextState;
+                while(getState(instanz + '.' + ('00' + counter).slice(-3)).notExist !== true) {
+                    // try to delete next states
+                    deleteState(instanz + '.' + ('00' + counter).slice(-3));
+                    counter++;
+                }*/
+            }
+        }
+    });
+};
