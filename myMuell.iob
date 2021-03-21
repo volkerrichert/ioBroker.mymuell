@@ -1,22 +1,27 @@
 const city_id = 66005;
 const area_id = 2800;
 const logging = false;
-const name = 'Müllabfuhr Wegberg';
-const desc = '[z.b. Straße]';
+const name = 'Müllabfuhr [Stadt]';
+const numberOfEntries = 9;
 
 const request = require('request');
-const instanz = 'javascript.' + instance + '.muell';
+const instanz = '0_userdata.' + instance + '.muell';
 
 if (logging) log('starting muell.' + instanz);
 
-// States erstellen
-createState(instanz, {
-    name: name,
-    desc: desc,
-    type: 'channel',
-    read: true,
-    write: false
-});
+extendObject(instanz, {
+        type: "device",
+        common: {
+            name: name
+        }
+    }, function (err) {
+        if (err) {
+            log('could not create device: ', 'warn');
+            return;
+        }
+    
+    }
+);
 let baseData = {};
 
 // query names first
@@ -50,18 +55,24 @@ function updateMuell() {
                 const todayStr = date.getFullYear() + "-" + ('00' + (date.getMonth() + 1 )).slice(-2) + "-" + ('00' + date.getDate()).slice(-2)
                 log(todayStr);
                 data.forEach((v, i) => {
-                    if (todayStr < v.cal_date && counter <= 9) {
+                    if (todayStr < v.cal_date && counter <= numberOfEntries) {
                         
                         const basePath = instanz + '.' + ('000' + counter).slice(-3);
-                        log(v.cal_date + ' -> ' + basePath);
+                        log(v.cal_date + ' -> ' + basePath, 'debug');
                         // States erstellen
-                        createState(basePath, {
-                            name: counter,
-                            desc: v.cal_date_normal,
-                            type: 'channel',
-                            read: true,
-                            write: false
-                        });
+                        extendObject(basePath, {
+                                type: "channel",
+                                common: {
+                                    name: v.cal_date_normal
+                                }
+                            }, function (err) {
+                                if (err) {
+                                    log('could not create device: ', 'warn');
+                                    return;
+                                }
+                            
+                            }
+                        );
                         createState(basePath + '.date', v.cal_date_normal, {
                             name: 'Datum',
                             desc: 'Datum der Abholung',
@@ -95,13 +106,6 @@ function updateMuell() {
                         counter++;
                     }
                 });
-                /*
-                let nextState;
-                while(getState(instanz + '.' + ('00' + counter).slice(-3)).notExist !== true) {
-                    // try to delete next states
-                    deleteState(instanz + '.' + ('00' + counter).slice(-3));
-                    counter++;
-                }*/
             }
         }
     });
